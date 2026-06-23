@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/painting.dart';
 
+import 'package:xterm/src/ui/builtin_glyphs.dart';
 import 'package:xterm/src/ui/palette_builder.dart';
 import 'package:xterm/src/ui/paragraph_cache.dart';
 import 'package:xterm/xterm.dart';
@@ -174,19 +175,25 @@ class TerminalPainter {
     final charCode = cellData.content & CellContent.codepointMask;
     if (charCode == 0) return;
 
+    // Block Elements / Box Drawing: paint procedurally so they fill the cell
+    // exactly and tile without gaps, instead of relying on the font glyph.
+    if (paintBuiltinGlyph(
+      canvas,
+      offset,
+      _cellSize,
+      charCode,
+      _resolveForegroundColor(cellData),
+    )) {
+      return;
+    }
+
     final cacheKey = cellData.getHash() ^ _textScaler.hashCode;
     var paragraph = _paragraphCache.getLayoutFromCache(cacheKey);
 
     if (paragraph == null) {
       final cellFlags = cellData.flags;
 
-      var color = cellFlags & CellFlags.inverse == 0
-          ? resolveForegroundColor(cellData.foreground)
-          : resolveBackgroundColor(cellData.background);
-
-      if (cellData.flags & CellFlags.faint != 0) {
-        color = color.withOpacity(0.5);
-      }
+      final color = _resolveForegroundColor(cellData);
 
       final style = _textStyle.toTextStyle(
         color: color,
@@ -215,6 +222,20 @@ class TerminalPainter {
     }
 
     canvas.drawParagraph(paragraph, offset);
+  }
+
+  /// The effective foreground color of [cellData], honoring the inverse and
+  /// faint flags. Shared by the font and the procedural ([paintBuiltinGlyph])
+  /// rendering paths.
+  Color _resolveForegroundColor(CellData cellData) {
+    final cellFlags = cellData.flags;
+    var color = cellFlags & CellFlags.inverse == 0
+        ? resolveForegroundColor(cellData.foreground)
+        : resolveBackgroundColor(cellData.background);
+    if (cellFlags & CellFlags.faint != 0) {
+      color = color.withOpacity(0.5);
+    }
+    return color;
   }
 
   /// Paints the background of a cell represented by [cellData] to [canvas] at
