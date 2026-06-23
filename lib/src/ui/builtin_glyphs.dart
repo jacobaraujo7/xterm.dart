@@ -32,6 +32,26 @@ bool paintBuiltinGlyph(
   return false;
 }
 
+/// Draws [r] but extends its right/bottom edge by 1px **when that edge sits on
+/// the cell boundary**, so same-colored fills in adjacent cells overlap instead
+/// of leaving a sub-pixel seam. Cell origin/size are fractional, so abutting
+/// rects can otherwise miss a column/row of pixels — which both shows the
+/// background through (vertical seam) and thins the overall ink (looks paler).
+/// Mirrors the `width + 1` trick the cell-background painter already uses.
+void _edgeFill(Canvas canvas, Rect r, Offset o, Size cell, Paint paint) {
+  final touchesRight = (r.right - (o.dx + cell.width)).abs() < 0.5;
+  final touchesBottom = (r.bottom - (o.dy + cell.height)).abs() < 0.5;
+  canvas.drawRect(
+    Rect.fromLTRB(
+      r.left,
+      r.top,
+      touchesRight ? r.right + 1.0 : r.right,
+      touchesBottom ? r.bottom + 1.0 : r.bottom,
+    ),
+    paint,
+  );
+}
+
 // ===========================================================================
 // Block Elements — U+2580..U+259F
 // ===========================================================================
@@ -51,7 +71,7 @@ void _paintBlockElement(
   if (cp >= 0x2591 && cp <= 0x2593) {
     const opacities = [0.25, 0.5, 0.75];
     paint.color = color.withOpacity(color.opacity * opacities[cp - 0x2591]);
-    canvas.drawRect(o & cell, paint);
+    _edgeFill(canvas, o & cell, o, cell, paint);
     return;
   }
 
@@ -61,10 +81,10 @@ void _paintBlockElement(
     final q = _quadrants[cp - 0x2596];
     final mx = o.dx + w / 2;
     final my = o.dy + h / 2;
-    if (q & _ul != 0) canvas.drawRect(Rect.fromLTWH(o.dx, o.dy, w / 2, h / 2), paint);
-    if (q & _ur != 0) canvas.drawRect(Rect.fromLTWH(mx, o.dy, w / 2, h / 2), paint);
-    if (q & _ll != 0) canvas.drawRect(Rect.fromLTWH(o.dx, my, w / 2, h / 2), paint);
-    if (q & _lr != 0) canvas.drawRect(Rect.fromLTWH(mx, my, w / 2, h / 2), paint);
+    if (q & _ul != 0) _edgeFill(canvas, Rect.fromLTWH(o.dx, o.dy, w / 2, h / 2), o, cell, paint);
+    if (q & _ur != 0) _edgeFill(canvas, Rect.fromLTWH(mx, o.dy, w / 2, h / 2), o, cell, paint);
+    if (q & _ll != 0) _edgeFill(canvas, Rect.fromLTWH(o.dx, my, w / 2, h / 2), o, cell, paint);
+    if (q & _lr != 0) _edgeFill(canvas, Rect.fromLTWH(mx, my, w / 2, h / 2), o, cell, paint);
     return;
   }
 
@@ -91,7 +111,7 @@ void _paintBlockElement(
     default:
       return;
   }
-  canvas.drawRect(r, paint);
+  _edgeFill(canvas, r, o, cell, paint);
 }
 
 const _ul = 1, _ur = 2, _ll = 4, _lr = 8;
@@ -261,19 +281,19 @@ void _paintBoxDrawing(
 
   if (u != 0) {
     final t = tw(u);
-    canvas.drawRect(Rect.fromLTRB(cx - t / 2, o.dy, cx + t / 2, cy), paint);
+    _edgeFill(canvas, Rect.fromLTRB(cx - t / 2, o.dy, cx + t / 2, cy), o, cell, paint);
   }
   if (d != 0) {
     final t = tw(d);
-    canvas.drawRect(Rect.fromLTRB(cx - t / 2, cy, cx + t / 2, o.dy + h), paint);
+    _edgeFill(canvas, Rect.fromLTRB(cx - t / 2, cy, cx + t / 2, o.dy + h), o, cell, paint);
   }
   if (l != 0) {
     final t = tw(l);
-    canvas.drawRect(Rect.fromLTRB(o.dx, cy - t / 2, cx, cy + t / 2), paint);
+    _edgeFill(canvas, Rect.fromLTRB(o.dx, cy - t / 2, cx, cy + t / 2), o, cell, paint);
   }
   if (r != 0) {
     final t = tw(r);
-    canvas.drawRect(Rect.fromLTRB(cx, cy - t / 2, o.dx + w, cy + t / 2), paint);
+    _edgeFill(canvas, Rect.fromLTRB(cx, cy - t / 2, o.dx + w, cy + t / 2), o, cell, paint);
   }
 }
 
