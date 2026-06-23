@@ -334,13 +334,28 @@ class BufferLine with IndexedItem {
     final builder = StringBuffer();
     for (var i = from; i < to; i++) {
       final codePoint = getCodePoint(i);
+      if (codePoint == 0) {
+        // Empty cell. Cursor-positioned TUIs (e.g. the Claude Code UI) lay text
+        // out by moving the cursor and erasing, leaving the gaps between words
+        // as blank cells (content 0) rather than space characters — so skipping
+        // them here makes copied text run together. Emit a space instead. The
+        // spacer cell that trails a wide glyph is also content 0, but it is
+        // consumed by the `i++` below, so it never reaches this branch.
+        builder.writeCharCode(0x20);
+        continue;
+      }
       final width = getWidth(i);
-      if (codePoint != 0 && i + width <= to) {
+      if (i + width <= to) {
         builder.writeCharCode(codePoint);
+      }
+      if (width == 2) {
+        i++; // skip the wide glyph's spacer cell
       }
     }
 
-    return builder.toString();
+    // Trailing blank cells pad the line out to the right edge; native terminals
+    // don't include that whitespace when copying.
+    return builder.toString().replaceFirst(RegExp(r'[ \t]+$'), '');
   }
 
   CellAnchor createAnchor(int offset) {
