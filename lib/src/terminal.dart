@@ -119,6 +119,14 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   final _cursorStyle = CursorStyle();
 
+  // OSC 8 hyperlinks. The link id is stored in the high bits (>=8) of a cell's
+  // attrs (the low 8 bits are the SGR attributes); `_hyperlinks` maps id → URI.
+  // See [setHyperlink]/[hyperlinkUrl]. id 0 means "no link".
+  static const _hyperlinkShift = 8;
+  final _hyperlinks = <int, String>{};
+  final _hyperlinkIds = <String, int>{};
+  var _hyperlinkSeq = 0;
+
   bool _insertMode = false;
 
   bool _lineFeedMode = false;
@@ -759,7 +767,34 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   @override
   void resetCursorStyle() {
+    // SGR 0 resets the visual attributes but NOT an open OSC 8 hyperlink (those
+    // are independent and closed explicitly by `OSC 8 ; ; ST`). Preserve the
+    // link id (high bits) across the reset.
+    final link = _cursorStyle.attrs & ~((1 << _hyperlinkShift) - 1);
     _cursorStyle.reset();
+    _cursorStyle.attrs |= link;
+  }
+
+  /// Opens (when [uri] is non-null/non-empty) or closes an OSC 8 hyperlink. The
+  /// current link id is carried in the cursor attrs so cells written next are
+  /// tagged with it.
+  void setHyperlink(String? uri) {
+    if (uri == null || uri.isEmpty) {
+      _cursorStyle.attrs &= (1 << _hyperlinkShift) - 1; // clear id, keep SGR
+      return;
+    }
+    final id = _hyperlinkIds[uri] ??= ++_hyperlinkSeq;
+    _hyperlinks[id] = uri;
+    _cursorStyle.attrs =
+        (_cursorStyle.attrs & ((1 << _hyperlinkShift) - 1)) |
+        (id << _hyperlinkShift);
+  }
+
+  /// URI of the OSC 8 hyperlink tagged on a cell with these [cellFlags] (a
+  /// cell's `attrs`), or null if the cell isn't part of a hyperlink.
+  String? hyperlinkUrl(int cellFlags) {
+    final id = cellFlags >> _hyperlinkShift;
+    return id == 0 ? null : _hyperlinks[id];
   }
 
   @override
@@ -901,6 +936,14 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   @override
   void unknownOSC(String ps, List<String> pt) {
+    // OSC 8 ; params ; URI ST — hyperlinks. `pt` is [params, URI...]; the URI is
+    // everything after the params separator (may itself contain ';'). Empty URI
+    // closes the current link.
+    if (ps == '8') {
+      final uri = pt.length >= 2 ? pt.sublist(1).join(';') : '';
+      setHyperlink(uri.isEmpty ? null : uri);
+      return;
+    }
     onPrivateOSC?.call(ps, pt);
   }
 }
