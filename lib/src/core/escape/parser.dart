@@ -236,7 +236,14 @@ class EscapeParser {
 
       final char = _queue.consume();
 
-      if (char == Ascii.semicolon) {
+      // Treat colon (sub-parameter separator, e.g. `38:2:r:g:b`, `4:0`) the same
+      // as semicolon. Without this the colon falls through every branch below
+      // and is silently dropped, merging digits across it: `4:0 m` (underline
+      // style none → off) is read as param `40`, so underline never turns off
+      // and the rest of the screen stays underlined. Modern apps (incl. Claude
+      // Code on `--resume`) emit colon sub-params; iTerm2/Ghostty handle them.
+      // Flattening colon→semicolon also enables colon-form truecolor.
+      if (char == Ascii.semicolon || char == Ascii.colon) {
         if (hasParam) {
           _csi.params.add(param);
         }
