@@ -415,6 +415,13 @@ class EscapeParser {
   ///
   /// https://terminalguide.namepad.de/seq/csi_sm/
   void _csiHandleSgr() {
+    // `CSI > ... m` (XTMODKEYS / modifyOtherKeys) and other private/prefixed
+    // forms are NOT SGR — they only share the final byte `m`. Without this guard
+    // the prefix is dropped and the params run through SGR: `CSI > 4 m` (sent by
+    // Claude Code to set modifyOtherKeys) is misread as SGR 4 → underline ON,
+    // which then leaks across the whole screen (the `claude --resume` bug).
+    if (_csi.prefix != null) return;
+
     final params = _csi.params;
 
     if (params.isEmpty) {
