@@ -559,7 +559,13 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   @override
   void sendCursorPosition() {
-    onOutput?.call(_emitter.cursorPosition(_buffer.cursorX, _buffer.cursorY));
+    // DSR-CPR is 1-based (top-left is row 1, col 1), but cursorX/cursorY are
+    // 0-based buffer coordinates — convert. Without the +1, apps that rely on
+    // the cursor report (e.g. fzf's `--height` mode) place their UI one row/col
+    // off. https://terminalguide.namepad.de/seq/csi_sn/
+    onOutput?.call(
+      _emitter.cursorPosition(_buffer.cursorX + 1, _buffer.cursorY + 1),
+    );
   }
 
   @override

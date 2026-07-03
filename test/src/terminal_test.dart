@@ -196,6 +196,55 @@ void main() {
       expect(lastData, isNull);
     });
   });
+
+  group('Terminal SGR', () {
+    int fgOf(Terminal t, int col) {
+      final line = t.buffer.lines[t.buffer.height - t.viewHeight];
+      return line.getForeground(col);
+    }
+
+    int bgOf(Terminal t, int col) {
+      final line = t.buffer.lines[t.buffer.height - t.viewHeight];
+      return line.getBackground(col);
+    }
+
+    test('applies a normal SGR color sequence', () {
+      final terminal = Terminal()..resize(80, 4);
+      terminal.write('\x1b[38;5;161;48;5;236mA');
+      expect(fgOf(terminal, 0), isNot(0));
+      expect(bgOf(terminal, 0), isNot(0));
+    });
+
+    test('applies SGR with a leading empty parameter (fzf highlight)', () {
+      // `CSI ; 1 ; 38;5;161 ; 48;5;236 m` — the empty first param must not be
+      // mistaken for a private-marker prefix, else the whole SGR is dropped and
+      // fzf's selection highlight never shows.
+      final terminal = Terminal()..resize(80, 4);
+      terminal.write('\x1b[;1;38;5;161;48;5;236mB');
+      expect(fgOf(terminal, 0), isNot(0), reason: 'foreground must be applied');
+      expect(bgOf(terminal, 0), isNot(0), reason: 'background must be applied');
+    });
+
+    test('applies SGR ";31" (leading empty param, plain color)', () {
+      final terminal = Terminal()..resize(80, 4);
+      terminal.write('\x1b[;31mC');
+      expect(fgOf(terminal, 0), isNot(0));
+    });
+  });
+
+  group('Terminal DSR', () {
+    test('cursor position report (CPR) is 1-based', () {
+      final output = <String>[];
+      final terminal = Terminal(onOutput: output.add)..resize(80, 24);
+
+      terminal.write('\x1b[H\x1b[6n'); // home, then query
+      expect(output.last, '\x1b[1;1R');
+
+      output.clear();
+      terminal.write('\x1b[5;10H\x1b[6n'); // row 5, col 10 (1-based), then query
+      expect(output.last, '\x1b[5;10R');
+    });
+  });
 }
 
 class _TestInputHandler implements TerminalInputHandler {

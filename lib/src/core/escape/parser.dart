@@ -218,8 +218,16 @@ class EscapeParser {
     _csi.params.clear();
 
     // test whether the csi is a `CSI ? Ps ...` or `CSI Ps ...`
+    //
+    // Only the private-marker bytes `< = > ?` (0x3C..0x3F) are prefixes. The
+    // range must NOT start at `:`/`;` (0x3A/0x3B): those are parameter
+    // separators. A sequence with an empty first parameter — e.g. fzf's
+    // highlight `CSI ; 1 ; 38;5;161 ; 48;5;236 m` — leads with `;`; if `;` were
+    // treated as a prefix, `_csi.prefix` would be non-null and `_csiHandleSgr`
+    // (which bails on any prefix, to ignore `CSI > 4 m` etc.) would drop the
+    // whole SGR, so the color/highlight is never applied.
     final prefix = _queue.peek();
-    if (prefix >= Ascii.colon && prefix <= Ascii.questionMark) {
+    if (prefix >= Ascii.lessThan && prefix <= Ascii.questionMark) {
       _csi.prefix = prefix;
       _queue.consume();
     } else {
