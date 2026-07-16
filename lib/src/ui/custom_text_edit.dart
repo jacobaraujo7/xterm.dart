@@ -160,6 +160,13 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
       _connection!.show();
     } else {
       final config = TextInputConfiguration(
+        // Obrigatório desde que o embedder passou a rotear o text input por
+        // view (multi-view). Sem isto o `TextInput.setClient` é rejeitado com
+        // "Could not set client, view ID is null" e o cliente nunca é anexado —
+        // o `setEditingState` seguinte então estoura com "no client is set" e
+        // o terminal fica sem receber texto. O `EditableText` do próprio
+        // framework preenche este campo do mesmo jeito.
+        viewId: View.of(context).viewId,
         inputType: widget.inputType,
         inputAction: widget.inputAction,
         keyboardAppearance: widget.keyboardAppearance,
